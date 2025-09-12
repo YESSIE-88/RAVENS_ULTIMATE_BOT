@@ -26,7 +26,7 @@ let cancelling_next_practice = false;
 let selectedPracticeIndex = null;
 
 let general_channel_name = 'general';
-let testing_channel_name = 'botbotbot1';
+let testing_channel_name = 'bot-commands';
 let cpatains_channel_name = 'captains';
 
 // Track skipped/cancelled reminders
