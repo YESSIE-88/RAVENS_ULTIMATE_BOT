@@ -27,6 +27,7 @@ let selectedPracticeIndex = null;
 
 let general_channel_name = 'general';
 let testing_channel_name = 'botbotbot1';
+let cpatains_channel_name = 'captains';
 
 // Track skipped/cancelled reminders
 const skippedReminders = new Set(); // YYYY-MM-DD strings
@@ -98,21 +99,34 @@ function formatDate(date) {
     return date.toISOString().split('T')[0];
 }
 
-// Helper: get next N practices from today
+// Helper: get next N practices from today, excluding today's past practices
 function getNextPractices(n = 6) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const now = new Date();
+    now.setSeconds(0, 0); // ignore seconds/milliseconds
     const list = [];
-    let d = new Date(today);
+    let d = new Date(now);
 
     while (list.length < n) {
-        if (practiceDays.includes(d.getDay())) {
-            list.push(new Date(d));
+        const dayMatches = practiceDays.includes(d.getDay());
+
+        // If today, only include if current time is before 7 AM
+        if (dayMatches) {
+            if (d.toDateString() === now.toDateString()) {
+                if (now.getHours() < 7) { 
+                    list.push(new Date(d));
+                }
+            } else {
+                list.push(new Date(d));
+            }
         }
+
         d.setDate(d.getDate() + 1);
+        d.setHours(0, 0, 0, 0); // reset time for subsequent days
     }
+
     return list;
 }
+
 
 // ---- Birthday check helper ----
 function checkBirthdaysToday() {
@@ -152,7 +166,7 @@ function schedulePracticeReminders() {
 
 // Schedule birthday messages (9 AM daily)
 function scheduleBirthdayMessages() {
-    cron.schedule("0 9 * * *", async () => {
+    cron.schedule("0 0 * * *", async () => {
         try {
             const todaysBirthdays = checkBirthdaysToday();
             if (todaysBirthdays.length === 0) return;
@@ -171,7 +185,7 @@ function scheduleBirthdayMessages() {
     });
 }
 
-client.on("ready", () => {
+client.on("clientReady", () => {
     console.log('Bot is online and ready!');
     schedulePracticeReminders();
     scheduleBirthdayMessages();
@@ -183,7 +197,7 @@ client.on("messageCreate", async (message) => {
         message.channel.type === 0 &&
         !message.author.bot
     ) {
-        if ( message.channel.name === testing_channel_name) {
+        if (message.channel.name === testing_channel_name || message.channel.name === cpatains_channel_name) {
 
             if (message.content.toLowerCase() === 'help') {
                 await message.reply(`
@@ -259,8 +273,10 @@ The commands you can use are:
                 await message.reply(
                     `Editing bot channel paths:\n` +
                     `1. general_channel_name = ${general_channel_name}\n` +
-                    `2. testing_channel_name = ${testing_channel_name}\n\n` +
-                    `Reply with **1** or **2** to edit the corresponding channel name, or anything else to cancel.`
+                    `2. testing_channel_name = ${testing_channel_name}\n` +
+                    `3. captains_channel_name = ${testing_channel_name}\n\n` +
+
+                    `Reply with **1**, **2** or **3** to edit the corresponding channel name, or anything else to cancel.`
                 );
             }
 
@@ -285,6 +301,8 @@ The commands you can use are:
                     case 2:
                         testing_channel_name = newChannelName;
                         break;
+                    case 3:
+                        cpatains_channel_name = newChannelName;
                 }
 
                 await message.reply(`✅ Channel path updated for option ${selected_channel_index}: now set to **${newChannelName}**.`);
