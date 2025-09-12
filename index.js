@@ -19,6 +19,7 @@ client.login(process.env.DISCORD_TOKEN).then(() => {
     console.error('Error logging in:', err);
 });
 
+// ------------------ CONFIG ------------------
 let testing = false;
 let editing_channel_path = false;
 let selected_channel_index = null;
@@ -35,7 +36,7 @@ const skippedReminders = new Set(); // YYYY-MM-DD strings
 // Practice days of week (Tue=2, Wed=3, Fri=5)
 const practiceDays = [2, 3, 5];
 
-// ---- Birthday list (predefined, no nulls) ----
+// ------------------ BIRTHDAYS ------------------
 const birthdays = [
   { name: "Andrew Hodge", birthday: "31-03-2003" },
   { name: "Andrew Yung", birthday: "08-07-2005" },
@@ -90,226 +91,249 @@ const birthdays = [
   { name: "Jeremy Close", birthday: "13-01-2006" },
 ];
 
-
-// Remove any invalid entries
+// ------------------ HELPERS ------------------
 const validBirthdays = birthdays.filter(b => b.birthday);
 
-// Helper: format date as YYYY-MM-DD
 function formatDate(date) {
     return date.toISOString().split('T')[0];
 }
 
-// Helper: get next N practices from today, excluding today's past practices
 function getNextPractices(n = 6) {
     const now = new Date();
-    now.setSeconds(0, 0); // ignore seconds/milliseconds
+    now.setSeconds(0, 0);
     const list = [];
     let d = new Date(now);
 
     while (list.length < n) {
-        const dayMatches = practiceDays.includes(d.getDay());
-
-        // If today, only include if current time is before 7 AM
-        if (dayMatches) {
+        if (practiceDays.includes(d.getDay())) {
             if (d.toDateString() === now.toDateString()) {
-                if (now.getHours() < 7) { 
-                    list.push(new Date(d));
-                }
+                if (now.getHours() < 7) list.push(new Date(d));
             } else {
                 list.push(new Date(d));
             }
         }
-
         d.setDate(d.getDate() + 1);
-        d.setHours(0, 0, 0, 0); // reset time for subsequent days
+        d.setHours(0, 0, 0, 0);
     }
 
     return list;
 }
 
-
-// ---- Birthday check helper ----
 function checkBirthdaysToday() {
     const today = new Date();
     const mmdd = today.toISOString().slice(5, 10); // "MM-DD"
     return validBirthdays.filter(b => {
-        const parts = b.birthday.split("/");
-        const month = parts[0].padStart(2, "0");
-        const day = parts[1].padStart(2, "0");
+        const parts = b.birthday.split("-");
+        const month = parts[1];
+        const day = parts[2];
         return `${month}-${day}` === mmdd;
     });
 }
 
-// Schedule practice reminders (7 PM day before)
+// ------------------ GUILD & CHANNEL SELECTION ------------------
+function getCurrentGuild() {
+    if (testing) {
+        return client.guilds.cache.find(g => g.name === "Bot Tester");
+    } else {
+        return client.guilds.cache.find(g => g.name === "Ravens Ultimate");
+    }
+}
+
+function getGeneralChannel(guild) {
+    if (!guild) return null;
+
+    if (testing) {
+        return guild.channels.cache.find(
+            ch => ch.name === testing_channel_name && ch.type === 0
+        );
+    } else {
+        const category = guild.channels.cache.find(
+            ch => ch.name === "All Teams" && ch.type === 4
+        );
+        if (!category) return null;
+
+        return guild.channels.cache.find(
+            ch => ch.name === general_channel_name && ch.parentId === category.id && ch.type === 0
+        );
+    }
+}
+
+// ------------------ SCHEDULED TASKS ------------------
 function schedulePracticeReminders() {
     cron.schedule('0 19 * * *', async () => {
         try {
-            const tomorrow = new Date();
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const tomorrowStr = formatDate(tomorrow);
-
-            if (!practiceDays.includes(tomorrow.getDay())) return;
-            if (skippedReminders.has(tomorrowStr)) return;
-
-            const channelName = testing ? testing_channel_name : general_channel_name;
-            const guild = client.guilds.cache.first();
-            const channel = guild.channels.cache.find(ch => ch.name === channelName);
-
-            if (channel) {
-                await channel.send("⏰ Reminder: Practice tomorrow morning at 7 AM!");
-            }
+            await sendPracticeReminder();
         } catch (err) {
             console.error("Error sending practice reminder:", err);
         }
     });
 }
 
-// Schedule birthday messages (9 AM daily)
 function scheduleBirthdayMessages() {
     cron.schedule("0 0 * * *", async () => {
         try {
-            const todaysBirthdays = checkBirthdaysToday();
-            if (todaysBirthdays.length === 0) return;
-
-            const channelName = testing ? testing_channel_name : general_channel_name;
-            const guild = client.guilds.cache.first();
-            const channel = guild.channels.cache.find(ch => ch.name === channelName);
-            if (!channel) return;
-
-            for (const b of todaysBirthdays) {
-                await channel.send(`🥳 Happy Birthday, **${b.name}**! 🎂🎉`);
-            }
+            await sendBirthdayMessages();
         } catch (err) {
             console.error("Error sending birthday messages:", err);
         }
     });
 }
 
+async function sendPracticeReminder() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = formatDate(tomorrow);
+
+    if (!practiceDays.includes(tomorrow.getDay())) return;
+    if (skippedReminders.has(tomorrowStr)) return;
+
+    const guild = getCurrentGuild();
+    if (!guild) return console.error("Guild not found for practice reminder");
+
+    const channel = getGeneralChannel(guild);
+    if (!channel) return console.error("Channel not found for practice reminder");
+
+    await channel.send("⏰ Reminder: Practice tomorrow morning at 7 AM!");
+}
+
+async function sendBirthdayMessages() {
+    const todaysBirthdays = checkBirthdaysToday();
+    if (todaysBirthdays.length === 0) return;
+
+    const guild = getCurrentGuild();
+    if (!guild) return console.error("Guild not found for birthday messages");
+
+    const channel = getGeneralChannel(guild);
+    if (!channel) return console.error("Channel not found for birthday messages");
+
+    for (const b of todaysBirthdays) {
+        await channel.send(`🥳 Happy Birthday, **${b.name}**! 🎂🎉`);
+    }
+}
+
+// ------------------ BOT EVENTS ------------------
 client.on("clientReady", () => {
     console.log('Bot is online and ready!');
     schedulePracticeReminders();
     scheduleBirthdayMessages();
 });
 
-// ---- Practice cancellation and channel path code remains unchanged ----
+// ------------------ MESSAGE COMMANDS ------------------
 client.on("messageCreate", async (message) => {
-    if (
-        message.channel.type === 0 &&
-        !message.author.bot
-    ) {
-        if (message.channel.name === testing_channel_name || message.channel.name === cpatains_channel_name) {
+    if (message.channel.type !== 0 || message.author.bot) return;
 
-            if (message.content.toLowerCase() === 'help') {
-                await message.reply(`
+    if (message.channel.name === testing_channel_name || message.channel.name === cpatains_channel_name) {
+
+        if (message.content.toLowerCase() === 'help') {
+            await message.reply(`
 The commands you can use are:
 - **bot_cancel_practice** (View and toggle the next 6 practices on/off)
 - **bot_change_channel_path** (Change the channel names where the bot sends messages)`);
-            }
+        }
 
-            else if (message.content === 'bot_cancel_practice') {
-                cancelling_next_practice = true;
-                selectedPracticeIndex = null;
+        else if (message.content === 'bot_cancel_practice') {
+            cancelling_next_practice = true;
+            selectedPracticeIndex = null;
 
-                const practices = getNextPractices(6);
-                let menu = "Upcoming practices:\n";
-                practices.forEach((d, i) => {
-                    const dateStr = formatDate(d);
-                    const day = d.toLocaleDateString('en-US', { weekday: 'long' });
-                    const status = skippedReminders.has(dateStr) ? "❌ Cancelled" : "✅ Active";
-                    menu += `${i + 1}. ${day} (${dateStr}) — ${status}\n`;
-                });
-                menu += "\nReply with the number of the practice you want to toggle, or anything else to cancel.";
-                await message.reply(menu);
-            }
+            const practices = getNextPractices(6);
+            let menu = "Upcoming practices:\n";
+            practices.forEach((d, i) => {
+                const dateStr = formatDate(d);
+                const day = d.toLocaleDateString('en-US', { weekday: 'long' });
+                const status = skippedReminders.has(dateStr) ? "❌ Cancelled" : "✅ Active";
+                menu += `${i + 1}. ${day} (${dateStr}) — ${status}\n`;
+            });
+            menu += "\nReply with the number of the practice you want to toggle, or anything else to cancel.";
+            await message.reply(menu);
+        }
 
-            else if (cancelling_next_practice && selectedPracticeIndex === null) {
-                const choice = parseInt(message.content.trim(), 10);
-                const practices = getNextPractices(6);
+        else if (cancelling_next_practice && selectedPracticeIndex === null) {
+            const choice = parseInt(message.content.trim(), 10);
+            const practices = getNextPractices(6);
 
-                if (!isNaN(choice) && choice >= 1 && choice <= practices.length) {
-                    selectedPracticeIndex = choice - 1;
-                    const date = practices[selectedPracticeIndex];
-                    const dateStr = formatDate(date);
-                    const day = date.toLocaleDateString('en-US', { weekday: 'long' });
-                    const isCancelled = skippedReminders.has(dateStr);
-
-                    await message.reply(
-                        `${day} (${dateStr}) is currently ${isCancelled ? "❌ Cancelled" : "✅ Active"}.\n` +
-                        `Reply with "toggle" to change its state, or anything else to cancel.`
-                    );
-                } else {
-                    cancelling_next_practice = false;
-                    await message.reply("❌ Cancelled practice menu.");
-                }
-            }
-
-            else if (cancelling_next_practice && selectedPracticeIndex !== null) {
-                const input = message.content.trim().toLowerCase();
-                const practices = getNextPractices(6);
+            if (!isNaN(choice) && choice >= 1 && choice <= practices.length) {
+                selectedPracticeIndex = choice - 1;
                 const date = practices[selectedPracticeIndex];
                 const dateStr = formatDate(date);
                 const day = date.toLocaleDateString('en-US', { weekday: 'long' });
-
-                if (input === "toggle") {
-                    if (skippedReminders.has(dateStr)) {
-                        skippedReminders.delete(dateStr);
-                        await message.reply(`✅ ${day} (${dateStr}) practice reminder has been re-enabled.`);
-                    } else {
-                        skippedReminders.add(dateStr);
-                        await message.reply(`❌ ${day} (${dateStr}) practice reminder has been cancelled.`);
-                    }
-                } else {
-                    await message.reply("❌ Cancelled without changes.");
-                }
-
-                cancelling_next_practice = false;
-                selectedPracticeIndex = null;
-            }
-
-            else if (message.content === 'bot_change_channel_path') {
-                editing_channel_path = true;
-                selected_channel_index = null;
+                const isCancelled = skippedReminders.has(dateStr);
 
                 await message.reply(
-                    `Editing bot channel paths:\n` +
-                    `1. general_channel_name = ${general_channel_name}\n` +
-                    `2. testing_channel_name = ${testing_channel_name}\n` +
-                    `3. captains_channel_name = ${testing_channel_name}\n\n` +
-
-                    `Reply with **1**, **2** or **3** to edit the corresponding channel name, or anything else to cancel.`
+                    `${day} (${dateStr}) is currently ${isCancelled ? "❌ Cancelled" : "✅ Active"}.\n` +
+                    `Reply with "toggle" to change its state, or anything else to cancel.`
                 );
+            } else {
+                cancelling_next_practice = false;
+                await message.reply("❌ Cancelled practice menu.");
             }
+        }
 
-            else if (editing_channel_path && selected_channel_index === null) {
-                const input = message.content.trim();
-                if (['1', '2'].includes(input)) {
-                    selected_channel_index = parseInt(input);
-                    await message.reply('Please enter the **new channel name** for this option.');
+        else if (cancelling_next_practice && selectedPracticeIndex !== null) {
+            const input = message.content.trim().toLowerCase();
+            const practices = getNextPractices(6);
+            const date = practices[selectedPracticeIndex];
+            const dateStr = formatDate(date);
+            const day = date.toLocaleDateString('en-US', { weekday: 'long' });
+
+            if (input === "toggle") {
+                if (skippedReminders.has(dateStr)) {
+                    skippedReminders.delete(dateStr);
+                    await message.reply(`✅ ${day} (${dateStr}) practice reminder has been re-enabled.`);
                 } else {
-                    editing_channel_path = false;
-                    await message.reply('Channel path edit cancelled.');
+                    skippedReminders.add(dateStr);
+                    await message.reply(`❌ ${day} (${dateStr}) practice reminder has been cancelled.`);
                 }
+            } else {
+                await message.reply("❌ Cancelled without changes.");
             }
 
-            else if (editing_channel_path && selected_channel_index !== null) {
-                const newChannelName = message.content.trim();
+            cancelling_next_practice = false;
+            selectedPracticeIndex = null;
+        }
 
-                switch (selected_channel_index) {
-                    case 1:
-                        general_channel_name = newChannelName;
-                        break;
-                    case 2:
-                        testing_channel_name = newChannelName;
-                        break;
-                    case 3:
-                        cpatains_channel_name = newChannelName;
-                }
+        else if (message.content === 'bot_change_channel_path') {
+            editing_channel_path = true;
+            selected_channel_index = null;
 
-                await message.reply(`✅ Channel path updated for option ${selected_channel_index}: now set to **${newChannelName}**.`);
+            await message.reply(
+                `Editing bot channel paths:\n` +
+                `1. general_channel_name = ${general_channel_name}\n` +
+                `2. testing_channel_name = ${testing_channel_name}\n` +
+                `3. captains_channel_name = ${testing_channel_name}\n\n` +
 
+                `Reply with **1**, **2** or **3** to edit the corresponding channel name, or anything else to cancel.`
+            );
+        }
+
+        else if (editing_channel_path && selected_channel_index === null) {
+            const input = message.content.trim();
+            if (['1', '2', '3'].includes(input)) {
+                selected_channel_index = parseInt(input);
+                await message.reply('Please enter the **new channel name** for this option.');
+            } else {
                 editing_channel_path = false;
-                selected_channel_index = null;
+                await message.reply('Channel path edit cancelled.');
             }
+        }
+
+        else if (editing_channel_path && selected_channel_index !== null) {
+            const newChannelName = message.content.trim();
+
+            switch (selected_channel_index) {
+                case 1:
+                    general_channel_name = newChannelName;
+                    break;
+                case 2:
+                    testing_channel_name = newChannelName;
+                    break;
+                case 3:
+                    cpatains_channel_name = newChannelName;
+            }
+
+            await message.reply(`✅ Channel path updated for option ${selected_channel_index}: now set to **${newChannelName}**.`);
+
+            editing_channel_path = false;
+            selected_channel_index = null;
         }
     }
 });
