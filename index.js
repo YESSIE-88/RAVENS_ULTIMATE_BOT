@@ -2,8 +2,11 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const { Client, GatewayIntentBits } = require('discord.js');
-const cron = require('node-cron');
+const fs = require('fs');
+const path = require('path');
+const cron = require('node-cron'); // <--- cron scheduler
 
+// ------------------ CLIENT ------------------
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -13,11 +16,9 @@ const client = new Client({
     ],
 });
 
-client.login(process.env.DISCORD_TOKEN).then(() => {
-    console.log('Bot logged in successfully!');
-}).catch(err => {
-    console.error('Error logging in:', err);
-});
+client.login(process.env.DISCORD_TOKEN)
+    .then(() => console.log('✅ Bot logged in successfully!'))
+    .catch(err => console.error('❌ Error logging in:', err));
 
 // ------------------ CONFIG ------------------
 let testing = false;
@@ -27,73 +28,26 @@ let cancelling_next_practice = false;
 let selectedPracticeIndex = null;
 
 let general_channel_name = 'general';
-let testing_channel_name = 'bot-commands';
-let cpatains_channel_name = 'captains';
+let testing_channel_name = 'botbotbot1';
+let bot_commands_channel_name = 'bot-commands';
 
-// Track skipped/cancelled reminders
 const skippedReminders = new Set(); // YYYY-MM-DD strings
-
-// Practice days of week (Tue=2, Wed=3, Fri=5)
-const practiceDays = [2, 3, 5];
+const practiceDays = [2, 3, 5]; // Tue, Wed, Fri
 
 // ------------------ BIRTHDAYS ------------------
-const birthdays = [
-  { name: "Andrew Hodge", birthday: "31-03-2003" },
-  { name: "Andrew Yung", birthday: "08-07-2005" },
-  { name: "Aydan Eng", birthday: "08-09-2005" },
-  { name: "Brody Good", birthday: "07-10-2003" },
-  { name: "Charlie Carreau", birthday: "04-05-2005" },
-  { name: "Ezekiel Batistil", birthday: "11-03-2004" },
-  { name: "Jack Lau", birthday: "10-08-2003" },
-  { name: "Liam Hill", birthday: "01-03-2004" },
-  { name: "Noah Archer", birthday: "06-12-2003" },
-  { name: "Owen Daigeler", birthday: "06-02-2005" },
-  { name: "Rob Wallace", birthday: "15-07-2005" },
-  { name: "Samuel Xie", birthday: "25-07-2007" },
-  { name: "Theo Checroune", birthday: "15-02-2005" },
-  { name: "Tristan Hodgson", birthday: "19-09-2007" },
-  { name: "Wesley Ormsby", birthday: "21-02-2006" },
-  { name: "Aidan Miklos", birthday: "26-02-2006" },
-  { name: "Andrew Weaver", birthday: "23-11-2005" },
-  { name: "Brett Ormsby", birthday: "21-02-2006" },
-  { name: "Derek Lien", birthday: "28-05-2006" },
-  { name: "Ford Healey", birthday: "10-09-1999" },
-  { name: "Ian Beddie", birthday: "16-07-2007" },
-  { name: "Jakob Bouse", birthday: "02-10-2003" },
-  { name: "James Hubbard", birthday: "25-09-2004" },
-  { name: "Jeremy Hornung", birthday: "18-11-2003" },
-  { name: "Julien Brombach", birthday: "25-05-2003" },
-  { name: "Keegan Tjoa", birthday: "26-07-2007" },
-  { name: "Kieran Grimshaw", birthday: "18-02-2007" },
-  { name: "Kyle teNyenhuis", birthday: "22-04-2003" },
-  { name: "Lee Murphy", birthday: "17-12-2001" },
-  { name: "Levi Viljakainen", birthday: "17-02-2001" },
-  { name: "Lucas Watts", birthday: "20-05-2005" },
-  { name: "Lukas Legal", birthday: "08-06-2007" },
-  { name: "Marley Humphreys", birthday: "13-04-2007" },
-  { name: "Matheo Mckeague", birthday: "12-10-2005" },
-  { name: "Matt Alberta", birthday: "20-11-2004" },
-  { name: "Neil Scott", birthday: "04-12-2007" },
-  { name: "Owen Woods", birthday: "28-06-2004" },
-  { name: "Ryan McCracken", birthday: "28-01-2007" },
-  { name: "Spencer List", birthday: "21-06-2005" },
-  { name: "Tarun Karthik", birthday: "29-05-2006" },
-  { name: "William Younger", birthday: "13-11-2007" },
-  { name: "Kyle Hunter", birthday: "26-11-1996" },
-  { name: "Liam Daigeler", birthday: "02-10-2003" },
-  { name: "Desmond Top", birthday: "23-02-2002" },
-  { name: "Dylan Melo", birthday: "20-03-2005" },
-  { name: "Jack Quach", birthday: "15-10-2005" },
-  { name: "Jack Lynam", birthday: "15-08-2006" },
-  { name: "Jessie Sellars", birthday: "15-09-2004" },
-  { name: "Kai Hyndman", birthday: "20-10-2006" },
-  { name: "Owen Smith", birthday: "18-03-2004" },
-  { name: "Jeremy Close", birthday: "13-01-2006" },
-];
-
-// ------------------ HELPERS ------------------
+let birthdays = [];
+try {
+    const filePath = path.join(__dirname, 'birthdays.json');
+    const data = fs.readFileSync(filePath, 'utf8');
+    birthdays = JSON.parse(data);
+    console.log(`📦 Loaded ${birthdays.length} birthdays from birthdays.json`);
+} catch (err) {
+    console.error('❌ Error loading birthdays.json:', err);
+    birthdays = [];
+}
 const validBirthdays = birthdays.filter(b => b.birthday);
 
+// ------------------ HELPERS ------------------
 function formatDate(date) {
     return date.toISOString().split('T')[0];
 }
@@ -115,114 +69,122 @@ function getNextPractices(n = 6) {
         d.setDate(d.getDate() + 1);
         d.setHours(0, 0, 0, 0);
     }
-
+    console.log(`📅 Next ${n} practices calculated:`, list.map(d => formatDate(d)));
     return list;
 }
 
 function checkBirthdaysToday() {
     const today = new Date();
-    const mmdd = today.toISOString().slice(5, 10); // "MM-DD"
-    return validBirthdays.filter(b => {
-        const parts = b.birthday.split("-");
-        const month = parts[1];
-        const day = parts[2];
-        return `${month}-${day}` === mmdd;
-    });
-}
+    const day = String(today.getDate()).padStart(2, '0');   // "01".."31"
+    const month = String(today.getMonth() + 1).padStart(2, '0'); // "01".."12"
 
-// ------------------ GUILD & CHANNEL SELECTION ------------------
-function getCurrentGuild() {
-    if (testing) {
-        return client.guilds.cache.find(g => g.name === "Bot Tester");
-    } else {
-        return client.guilds.cache.find(g => g.name === "Ravens Ultimate");
-    }
-}
-
-function getGeneralChannel(guild) {
-    if (!guild) return null;
-
-    if (testing) {
-        return guild.channels.cache.find(
-            ch => ch.name === testing_channel_name && ch.type === 0
-        );
-    } else {
-        const category = guild.channels.cache.find(
-            ch => ch.name === "All Teams" && ch.type === 4
-        );
-        if (!category) return null;
-
-        return guild.channels.cache.find(
-            ch => ch.name === general_channel_name && ch.parentId === category.id && ch.type === 0
-        );
-    }
-}
-
-// ------------------ SCHEDULED TASKS ------------------
-function schedulePracticeReminders() {
-    cron.schedule('0 19 * * *', async () => {
-        try {
-            await sendPracticeReminder();
-        } catch (err) {
-            console.error("Error sending practice reminder:", err);
+    const todaysBirthdays = validBirthdays.filter(b => {
+        const parts = b.birthday.split('-'); // dd-mm-yyyy
+        if (parts.length !== 3) {
+            console.warn(`⚠️ Invalid birthday format for ${b.name}: ${b.birthday}`);
+            return false;
         }
+        const bDay = parts[0];
+        const bMonth = parts[1];
+        return bDay === day && bMonth === month;
     });
+
+    console.log(`🎂 Today is ${day}-${month}. Found ${todaysBirthdays.length} birthday(s).`);
+    return todaysBirthdays;
 }
 
-function scheduleBirthdayMessages() {
-    cron.schedule("0 0 * * *", async () => {
-        try {
-            await sendBirthdayMessages();
-        } catch (err) {
-            console.error("Error sending birthday messages:", err);
+function getChannelByName(name) {
+    console.log(`🔎 Looking for channel "${name}" in all guilds...`);
+    for (const [, guild] of client.guilds.cache) {
+        const channel = guild.channels.cache.find(ch => ch.name === name && ch.type === 0);
+        if (channel) {
+            console.log(`✅ Found channel "${name}" in guild "${guild.name}"`);
+            return channel;
         }
-    });
+    }
+    console.warn(`❌ Channel "${name}" not found in any guild`);
+    return null;
 }
 
-async function sendPracticeReminder() {
+// ------------------ REMINDERS ------------------
+function sendPracticeReminder() {
+    console.log("⏰ Preparing to send practice reminder...");
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const tomorrowStr = formatDate(tomorrow);
 
-    if (!practiceDays.includes(tomorrow.getDay())) return;
-    if (skippedReminders.has(tomorrowStr)) return;
-
-    const guild = getCurrentGuild();
-    if (!guild) return console.error("Guild not found for practice reminder");
-
-    const channel = getGeneralChannel(guild);
-    if (!channel) return console.error("Channel not found for practice reminder");
-
-    await channel.send("⏰ Reminder: Practice tomorrow morning at 7 AM!");
-}
-
-async function sendBirthdayMessages() {
-    const todaysBirthdays = checkBirthdaysToday();
-    if (todaysBirthdays.length === 0) return;
-
-    const guild = getCurrentGuild();
-    if (!guild) return console.error("Guild not found for birthday messages");
-
-    const channel = getGeneralChannel(guild);
-    if (!channel) return console.error("Channel not found for birthday messages");
-
-    for (const b of todaysBirthdays) {
-        await channel.send(`🥳 Happy Birthday, **${b.name}**! 🎂🎉`);
+    if (!practiceDays.includes(tomorrow.getDay())) {
+        console.log("⏱ No practice tomorrow. Skipping reminder.");
+        return;
     }
+    if (skippedReminders.has(tomorrowStr)) {
+        console.log(`⏱ Practice reminder for ${tomorrowStr} skipped due to cancellation.`);
+        return;
+    }
+
+    const channel = getChannelByName(general_channel_name);
+    if (!channel) {
+        console.error("❌ Channel not found for practice reminder.");
+        return;
+    }
+
+    channel.send("⏰ Reminder: Practice tomorrow morning at 7 AM!")
+        .then(() => console.log(`✅ Practice reminder sent to #${channel.name}`))
+        .catch(err => console.error("❌ Error sending practice reminder:", err));
 }
 
-// ------------------ BOT EVENTS ------------------
-client.on("clientReady", () => {
-    console.log('Bot is online and ready!');
-    schedulePracticeReminders();
-    scheduleBirthdayMessages();
+function sendBirthdayMessages() {
+    const todaysBirthdays = checkBirthdaysToday();
+
+    if (todaysBirthdays.length === 0) {
+        console.log("🎉 No birthdays today.");
+        return;
+    }
+
+    const channelName = testing ? testing_channel_name : general_channel_name;
+    const channel = getChannelByName(channelName);
+    if (!channel) {
+        console.error("❌ Channel not found! Birthday messages will not be sent.");
+        return;
+    }
+
+    console.log(`🎉 Sending birthday messages to channel "${channelName}"...`);
+    todaysBirthdays.forEach((b, idx) => {
+        channel.send(`🥳 Happy Birthday, **${b.name}**! 🎂🎉`)
+            .then(() => console.log(`✅ [${idx + 1}/${todaysBirthdays.length}] Sent birthday message to ${b.name}`))
+            .catch(err => console.error(`❌ [${idx + 1}/${todaysBirthdays.length}] Failed to send birthday message to ${b.name}:`, err));
+    });
+}
+
+// ------------------ CRON SCHEDULER ------------------
+client.once("ready", () => {
+    console.log(`✅ Logged in as ${client.user.tag}`);
+
+    // Birthday cron (runs daily at Midnight)
+    cron.schedule('0 0 * * *', () => {
+        console.log("🎂 Cron job triggered for birthday messages.");
+        sendBirthdayMessages();
+    }, {
+        timezone: "America/New_York" // adjust as needed
+    });
+
+    // Practice reminder cron (runs daily at 7:00 PM)
+    cron.schedule('0 19 * * *', () => {
+        console.log("⏰ Cron job triggered for practice reminder.");
+        sendPracticeReminder();
+    }, {
+        timezone: "America/New_York"
+    });
 });
 
 // ------------------ MESSAGE COMMANDS ------------------
+// (Keep your existing messageCreate handler unchanged)
 client.on("messageCreate", async (message) => {
     if (message.channel.type !== 0 || message.author.bot) return;
 
-    if (message.channel.name === testing_channel_name || message.channel.name === cpatains_channel_name) {
+    if ([testing_channel_name, bot_commands_channel_name].includes(message.channel.name)) {
+        console.log(`📨 Received message in monitored channel: ${message.content}`);
+
 
         if (message.content.toLowerCase() === 'help') {
             await message.reply(`
@@ -299,8 +261,7 @@ The commands you can use are:
                 `Editing bot channel paths:\n` +
                 `1. general_channel_name = ${general_channel_name}\n` +
                 `2. testing_channel_name = ${testing_channel_name}\n` +
-                `3. captains_channel_name = ${testing_channel_name}\n\n` +
-
+                `3. bot_commands_channel_name = ${bot_commands_channel_name}\n\n` +
                 `Reply with **1**, **2** or **3** to edit the corresponding channel name, or anything else to cancel.`
             );
         }
@@ -318,20 +279,12 @@ The commands you can use are:
 
         else if (editing_channel_path && selected_channel_index !== null) {
             const newChannelName = message.content.trim();
-
             switch (selected_channel_index) {
-                case 1:
-                    general_channel_name = newChannelName;
-                    break;
-                case 2:
-                    testing_channel_name = newChannelName;
-                    break;
-                case 3:
-                    cpatains_channel_name = newChannelName;
+                case 1: general_channel_name = newChannelName; break;
+                case 2: testing_channel_name = newChannelName; break;
+                case 3: bot_commands_channel_name = newChannelName; break;
             }
-
-            await message.reply(`✅ Channel path updated for option ${selected_channel_index}: now set to **${newChannelName}**.`);
-
+            await message.reply(`✅ Channel path updated for option ${selectedChannelIndex}: now set to **${newChannelName}**.`);
             editing_channel_path = false;
             selected_channel_index = null;
         }
