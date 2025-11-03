@@ -4,7 +4,8 @@ dotenv.config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-const cron = require('node-cron'); // <--- cron scheduler
+const cron = require('node-cron');
+const moment = require('moment-timezone'); // ✅ helps keep Toronto time consistent
 
 // ------------------ CLIENT ------------------
 const client = new Client({
@@ -31,8 +32,9 @@ let general_channel_name = 'general';
 let testing_channel_name = 'botbotbot1';
 let bot_commands_channel_name = 'bot-commands';
 
-const skippedReminders = new Set(); // YYYY-MM-DD strings
-const practiceDays = [2, 3, 5]; // Tue, Wed, Fri
+const skippedReminders = new Set();
+// const practiceDays = [2, 3, 5]; // Tuesday, Wednesday + Friday
+const practiceDays = [1, 3]; // Monday + Wednesday
 
 // ------------------ BIRTHDAYS ------------------
 let birthdays = [];
@@ -49,47 +51,44 @@ const validBirthdays = birthdays.filter(b => b.birthday);
 
 // ------------------ HELPERS ------------------
 function formatDate(date) {
-    return date.toISOString().split('T')[0];
+    return moment(date).tz("America/Toronto").format("YYYY-MM-DD");
 }
 
 function getNextPractices(n = 6) {
-    const now = new Date();
-    now.setSeconds(0, 0);
+    const now = moment().tz("America/Toronto").startOf('day');
     const list = [];
-    let d = new Date(now);
 
+    let d = now.clone();
     while (list.length < n) {
-        if (practiceDays.includes(d.getDay())) {
-            if (d.toDateString() === now.toDateString()) {
-                if (now.getHours() < 7) list.push(new Date(d));
+        if (practiceDays.includes(d.day())) {
+            if (d.isSame(now, 'day')) {
+                const currentHour = moment().tz("America/Toronto").hour();
+                if (currentHour < 7) list.push(d.clone().toDate());
             } else {
-                list.push(new Date(d));
+                list.push(d.clone().toDate());
             }
         }
-        d.setDate(d.getDate() + 1);
-        d.setHours(0, 0, 0, 0);
+        d.add(1, 'day');
     }
     console.log(`📅 Next ${n} practices calculated:`, list.map(d => formatDate(d)));
     return list;
 }
 
 function checkBirthdaysToday() {
-    const today = new Date();
-    const day = String(today.getDate()).padStart(2, '0');   // "01".."31"
-    const month = String(today.getMonth() + 1).padStart(2, '0'); // "01".."12"
+    const today = moment().tz("America/Toronto");
+    const day = today.format('DD');
+    const month = today.format('MM');
 
     const todaysBirthdays = validBirthdays.filter(b => {
-        const parts = b.birthday.split('-'); // dd-mm-yyyy
+        const parts = b.birthday.split('-');
         if (parts.length !== 3) {
             console.warn(`⚠️ Invalid birthday format for ${b.name}: ${b.birthday}`);
             return false;
         }
-        const bDay = parts[0];
-        const bMonth = parts[1];
-        return bDay === day && bMonth === month;
+        return parts[0] === day && parts[1] === month;
     });
 
-    console.log(`🎂 Today is ${day}-${month}. Found ${todaysBirthdays.length} birthday(s).`);
+    console.log(`🎂 Today in Toronto: ${today.format('DD-MM')}. Found ${todaysBirthdays.length} birthday(s).`);
     return todaysBirthdays;
 }
 
@@ -108,34 +107,40 @@ function getChannelByName(name) {
 
 // ------------------ REMINDERS ------------------
 function sendPracticeReminder() {
-    console.log("⏰ Preparing to send practice reminder...");
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = formatDate(tomorrow);
+    const nowToronto = moment().tz("America/Toronto");
+    console.log("====================================================");
+    console.log("📢 [sendPracticeReminder] Triggered at:", nowToronto.format());
+    console.log("====================================================");
 
-    if (!practiceDays.includes(tomorrow.getDay())) {
-        console.log("⏱ No practice tomorrow. Skipping reminder.");
+    const tomorrow = nowToronto.clone().add(1, 'day').startOf('day');
+    const tomorrowStr = tomorrow.format("YYYY-MM-DD");
+    const tomorrowDay = tomorrow.day();
+    const tomorrowName = tomorrow.format("dddd");
+
+    console.log(`🗓 Tomorrow: ${tomorrowName} (${tomorrowStr})`);
+
+    if (!practiceDays.includes(tomorrowDay)) {
+        console.log(`🚫 Tomorrow (${tomorrowName}) is NOT a practice day.`);
         return;
     }
+
     if (skippedReminders.has(tomorrowStr)) {
-        console.log(`⏱ Practice reminder for ${tomorrowStr} skipped due to cancellation.`);
+        console.log(`🚫 Reminder for ${tomorrowStr} is cancelled.`);
         return;
     }
 
-    const channel = getChannelByName(general_channel_name);
-    if (!channel) {
-        console.error("❌ Channel not found for practice reminder.");
-        return;
-    }
+    const channelName = testing ? testing_channel_name : general_channel_name;
+    const channel = getChannelByName(channelName);
+    if (!channel) return console.error(`❌ Channel "${channelName}" not found.`);
 
-    channel.send("⏰ Reminder: Practice tomorrow morning at 7 AM!")
-        .then(() => console.log(`✅ Practice reminder sent to #${channel.name}`))
-        .catch(err => console.error("❌ Error sending practice reminder:", err));
+    const message = `⏰ Reminder: Practice tomorrow morning at 7 AM!`;
+    channel.send(message)
+        .then(() => console.log(`✅ Sent reminder to #${channel.name} at ${nowToronto.format('HH:mm:ss')}`))
+        .catch(err => console.error("❌ Error sending reminder:", err));
 }
 
 function sendBirthdayMessages() {
     const todaysBirthdays = checkBirthdaysToday();
-
     if (todaysBirthdays.length === 0) {
         console.log("🎉 No birthdays today.");
         return;
@@ -143,42 +148,38 @@ function sendBirthdayMessages() {
 
     const channelName = testing ? testing_channel_name : general_channel_name;
     const channel = getChannelByName(channelName);
-    if (!channel) {
-        console.error("❌ Channel not found! Birthday messages will not be sent.");
-        return;
-    }
+    if (!channel) return console.error("❌ Channel not found!");
 
-    console.log(`🎉 Sending birthday messages to channel "${channelName}"...`);
-    todaysBirthdays.forEach((b, idx) => {
+    todaysBirthdays.forEach((b, i) => {
         channel.send(`🥳 Happy Birthday, **${b.name}**! 🎂🎉`)
-            .then(() => console.log(`✅ [${idx + 1}/${todaysBirthdays.length}] Sent birthday message to ${b.name}`))
-            .catch(err => console.error(`❌ [${idx + 1}/${todaysBirthdays.length}] Failed to send birthday message to ${b.name}:`, err));
+            .then(() => console.log(`✅ [${i + 1}/${todaysBirthdays.length}] Sent to ${b.name}`))
+            .catch(err => console.error(`❌ Failed to send to ${b.name}:`, err));
     });
 }
 
 // ------------------ CRON SCHEDULER ------------------
 client.once("ready", () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
+    console.log("🕒 All scheduled times are in America/Toronto timezone (DST-safe).");
 
-    // Birthday cron (runs daily at Midnight)
+    // 🎂 Birthday cron: midnight Toronto time
     cron.schedule('0 0 * * *', () => {
-        console.log("🎂 Cron job triggered for birthday messages.");
+        console.log("🎂 Birthday cron triggered (Toronto time).");
         sendBirthdayMessages();
     }, {
-        timezone: "America/New_York" // adjust as needed
+        timezone: "America/Toronto"
     });
 
-    // Practice reminder cron (runs daily at 7:00 PM)
+    // 🏋️ Practice reminder cron: 7:00 PM Toronto time
     cron.schedule('0 19 * * *', () => {
-        console.log("⏰ Cron job triggered for practice reminder.");
+        console.log("⏰ Practice reminder cron triggered (Toronto time).");
         sendPracticeReminder();
     }, {
-        timezone: "America/New_York"
+        timezone: "America/Toronto"
     });
 });
 
 // ------------------ MESSAGE COMMANDS ------------------
-// (Keep your existing messageCreate handler unchanged)
 client.on("messageCreate", async (message) => {
     if (message.channel.type !== 0 || message.author.bot) return;
 
