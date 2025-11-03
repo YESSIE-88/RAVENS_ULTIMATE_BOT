@@ -8,7 +8,9 @@ Run the command: npm i node-cron
 
 Run the command: npm i discord.js
 
-Run  the command: npm i dotenv
+Run the command: npm i dotenv
+
+Run the command: npm i moment-timezone
 
 Enter your own discord token in the .env file
 
