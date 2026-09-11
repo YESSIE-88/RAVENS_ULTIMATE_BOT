@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=HomelabBot
+Comment=Discord bot for ravens ultimate
+Exec=lxterminal --working-directory=/home/jessie/Desktop/RAVENS_ULTIMATE_BOT -e "bash -c 'sleep 60 && /home/jessie/Desktop/RAVENS_ULTIMATE_BOT/network-wait.sh && /home/jessie/Desktop/RAVENS_ULTIMATE_BOT/start.sh; exec bash'"
+X-GNOME-Autostart-enabled=true

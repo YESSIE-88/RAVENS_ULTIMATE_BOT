@@ -16,15 +16,14 @@ Enter your own discord token in the .env file
 
 To start the bot in the server use: node index.js
 
-Alternatively you can host this bot on a remote server, like digital ocean or google app engines:
-
-To start the bot with google app engines use: gcloud app deploy
-
-To pause the bot you can just redeploy it with an invalid token
-
-To list versions you can list them with: gcloud app versions list
-To delete them use: gcloud app versions delete VERSION.ID
-
-Finally the third option (and best imo) is to run this on a raspberry pi or other sbc because you have more control and its basicaly free
-
 MAKE SURE TO ONLY HAVE THE BOT RUNNING IN ONE INSTANCE AT A TIME!!!
+
+### Installation for auto launch
+
+1. **Copy the desktop file**
+   ```bash
+   cp ravens-ultimate-bot.desktop ~/.config/autostart/ravens-ultimate-bot.desktop
+
+2. **Make the scripts executable**
+   ```bash
+   chmod +x network-wait.sh start.sh
