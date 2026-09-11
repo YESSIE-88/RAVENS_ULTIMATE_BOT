@@ -27,13 +27,6 @@ if [ ! -d "node_modules" ]; then
     echo "Dependencies installed!"
 fi
 
-# Check if bot is already running
-if pgrep -f "node index.js" > /dev/null; then
-    echo "Error: Bot is already running!"
-    echo "To stop it manually: pkill -f 'node index.js'"
-    exit 1
-fi
-
 echo "Starting Homelab Bot..."
 echo "Send 'ping' in Discord to check if your homelab is online!"
 node index.js
