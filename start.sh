@@ -2,7 +2,7 @@
 
 # start.sh - Main bot startup script
 
-echo "🏠 Ravens Ultimate Bot Setup & Start Script"
+echo "Ravens Ultimate Bot Setup & Start Script"
 echo "================================="
 
 # Check if Node.js is installed
@@ -27,6 +27,5 @@ if [ ! -d "node_modules" ]; then
     echo "Dependencies installed!"
 fi
 
-echo "Starting Homelab Bot..."
-echo "Send 'ping' in Discord to check if your homelab is online!"
+echo "Starting Ravens Ultimate Bot..."
 node index.js
