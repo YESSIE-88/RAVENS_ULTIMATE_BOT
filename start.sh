@@ -2,7 +2,7 @@
 
 # start.sh - Main bot startup script
 
-echo "🏠 Homelab Bot Setup & Start Script"
+echo "🏠 Ravens Ultimate Bot Setup & Start Script"
 echo "================================="
 
 # Check if Node.js is installed
