@@ -33,8 +33,8 @@ let testing_channel_name = 'botbotbot1';
 let bot_commands_channel_name = 'bot-commands';
 
 const skippedReminders = new Set();
-// const practiceDays = [2, 3, 5]; // Tuesday, Wednesday + Friday
-const practiceDays = [1, 3]; // Monday + Wednesday
+const practiceDays = [2, 3, 5]; // Tuesday, Wednesday + Friday
+// const practiceDays = [1, 3]; // Monday + Wednesday
 
 // ------------------ BIRTHDAYS ------------------
 let birthdays = [];
@@ -158,7 +158,7 @@ function sendBirthdayMessages() {
 }
 
 // ------------------ CRON SCHEDULER ------------------
-client.once("ready", () => {
+client.once(Events.ClientReady, () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
     console.log("🕒 All scheduled times are in America/Toronto timezone (DST-safe).");
 
